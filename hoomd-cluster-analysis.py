@@ -17,7 +17,9 @@ except IOError:
 #sizeprof requires a numpy 1D array of positions and a knowledge of the number of atoms in a molecule
 #return peps from a function that assumes a gsd trajectory already exists
 def getPos(t,traj,subset='all'):
+
     snap = traj[t]
+
     pos = snap.particles.position
     #rearrange so they're all segregated according to the body they're in
     binds = np.argsort(snap.particles.body)
@@ -145,7 +147,7 @@ if __name__ == "__main__":
     inputfname = "/home/rachael/coarsegraining/hoomd/patchytest/analysis_testing/rigid5.gsd"
     traj = gsd.hoomd.open(inputfname)
     #contact clusters
-    sizerun(tlist,traj,cutoff,ats,'contact',fnm=outputFilename)
+    #sizerun(tlist,traj,cutoff,ats,'contact',fnm=outputFilename)
     #optical clusters
     optats = 12
     outputFname = "opticalsizes.dat"

@@ -48,10 +48,13 @@ def runwrite(steps,fid,system,step=1):
     
 
 #initialize five-bead rigid body
-def rigid5init(system,beadMass,beadR,lbeadR,sticky_theta):
+def rigid5init(system,beadMass,beadR,lbeadR,sticky_theta,offset):
     for p in system.particles:
         #set moment of inertia based on overlapping spheres and radius = 0.5 with rigid beads laid out along x axis
-        p.moment_inertia = (5*isphere(beadMass,beadR,0),isphereline(beadMass,beadR,beadR,2),isphereline(beadMass,beadR,beadR,2))
+        Ixx = 3*isphere(beadMass,beadR,0)+2*isphere(3.75*beadMass,beadR,0)
+        Iyy = isphere(beadMass,beadR,0) + 2*isphere(beadMass,beadR,beadR) + 2*isphere(3.75*beadMass,beadR,3*beadR)
+        Izz = Iyy
+        p.moment_inertia = (Ixx,Iyy,Izz)
     #add secondary particle types to simulation
     system.particles.types.add('E2')
     system.particles.types.add('LB')
@@ -59,7 +62,47 @@ def rigid5init(system,beadMass,beadR,lbeadR,sticky_theta):
      #LB is large LJ sticky particle, LS is small LJ sticky particle
     #create rigid particles
     rigid = md.constrain.rigid()
-    rigid.set_param('E',positions=[(-beadR,0,0),(beadR,0,0),(-2*beadR,0,0),(2*beadR,0,0),(0,beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(0,-beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(beadR,beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(beadR,-beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(-beadR,beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(-beadR,-beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(0,beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(0,-beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(beadR,beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(beadR,-beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(-beadR,beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(-beadR,-beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta))],types=['E2','E2','LB','LB','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS']) #type of particle has to be different from central particle because otherwise they are defined recursively
+    lbeadR -= offset #move little beads further in or out as desired
+    rigid.set_param('E',positions=[(-beadR,0,0),(beadR,0,0),(-3*beadR,0,0),(3*beadR,0,0),(0,(beadR-lbeadR)*np.cos(sticky_theta),(beadR-lbeadR)*np.sin(sticky_theta)),(0,-(beadR-lbeadR)*np.cos(sticky_theta),(beadR-lbeadR)*np.sin(sticky_theta)),(beadR,(beadR-lbeadR)*np.cos(sticky_theta),(beadR-lbeadR)*np.sin(sticky_theta)),(beadR,-(beadR-lbeadR)*np.cos(sticky_theta),(beadR-lbeadR)*np.sin(sticky_theta)),(-beadR,(beadR-lbeadR)*np.cos(sticky_theta),(beadR-lbeadR)*np.sin(sticky_theta)),(-beadR,-(beadR-lbeadR)*np.cos(sticky_theta),(beadR-lbeadR)*np.sin(sticky_theta)),(0,(beadR-lbeadR)*np.cos(sticky_theta),-(beadR-lbeadR)*np.sin(sticky_theta)),(0,-(beadR-lbeadR)*np.cos(sticky_theta),-(beadR-lbeadR)*np.sin(sticky_theta)),(beadR,(beadR-lbeadR)*np.cos(sticky_theta),-(beadR-lbeadR)*np.sin(sticky_theta)),(beadR,-(beadR-lbeadR)*np.cos(sticky_theta),-(beadR-lbeadR)*np.sin(sticky_theta)),(-beadR,(beadR-lbeadR)*np.cos(sticky_theta),-(beadR-lbeadR)*np.sin(sticky_theta)),(-beadR,-(beadR-lbeadR)*np.cos(sticky_theta),-(beadR-lbeadR)*np.sin(sticky_theta))],types=['E2','E2','LB','LB','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS']) #type of particle has to be different from central particle because otherwise they are defined recursively
+    lbeadR += offset   
+    rigid.create_bodies()
+    
+    #create different groups
+    groupR = group.rigid_center()
+    groupLB = group.type('LB')
+    groupLS = group.type('LS')
+    groupBB = (group.type('E') or group.type('E2'))
+    
+    #set masses and diameters of beads
+    for p in groupBB: 
+        p.mass = beadMass
+        p.diameter = 2*beadR
+        
+    for p in groupLB:
+        p.mass = 3.75*beadMass
+        p.diameter = 2*beadR
+    
+    for p in groupLS:
+        p.mass = 0.0
+        p.diameter = 2*lbeadR
+    return (rigid,groupR,groupLB,groupLS)
+    
+#initialize hybrid model
+   
+def hybridinit(system,beadMass,beadR,lbeadR,sticky_theta,L,rho):
+    gamma = 1.+L/(2.*beadR)
+    Ixx = np.pi*rho*beadR*beadR*beadR*beadR*beadR*((gamma-1.)+8./15.)
+    Iyy = np.pi*rho*beadR*beadR*beadR*beadR*beadR*(((gamma-1.)/6.)*(3.+4.*(gamma-1.)*(gamma-1.))+(4./3.)*(83./320.+((gamma-1.)+3./8.)*((gamma-1.0)*3./8.)))
+    for p in system.particles:
+        #set moment of inertia based on overlapping spheres and radius = 0.5 with rigid beads laid out along x axis
+        p.moment_inertia = (Ixx,Iyy,Iyy)
+    #add secondary particle types to simulation
+    system.particles.types.add('LB')
+    system.particles.types.add('LS')
+     #LB is large LJ sticky particle, LS is small LJ sticky particle
+    #create rigid particles
+    rigid = md.constrain.rigid()
+    rigid.set_param('S',positions=[(-2*beadR,0,0),(2*beadR,0,0),(0,beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(0,-beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(beadR,beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(beadR,-beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(-beadR,beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(-beadR,-beadR*np.cos(sticky_theta),beadR*np.sin(sticky_theta)),(0,beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(0,-beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(beadR,beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(beadR,-beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(-beadR,beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta)),(-beadR,-beadR*np.cos(sticky_theta),-beadR*np.sin(sticky_theta))],types=['LB','LB','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS','LS']) #type of particle has to be different from central particle because otherwise they are defined recursively
     rigid.create_bodies()
     
     #create different groups
