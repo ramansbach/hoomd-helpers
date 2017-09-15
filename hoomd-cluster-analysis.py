@@ -16,7 +16,7 @@ except IOError:
     
 #sizeprof requires a numpy 1D array of positions and a knowledge of the number of atoms in a molecule
 #return peps from a function that assumes a gsd trajectory already exists
-def getPos(t,traj,subset='all'):
+def getPos(t,traj,subset='all',com=False):
 
     snap = traj[t]
 
@@ -29,10 +29,25 @@ def getPos(t,traj,subset='all'):
         typeid = snap.particles.types.index(subset)
         types = snap.particles.typeid[binds]
         pos = pos[np.where(types==typeid)[0]]
-    
     sz = np.shape(pos)
+    #return not the atom positions but the COM locations of sets of beads
+    #if com is not false, it should be some list of pairs, ie [(5,6),(7,8),(9,10),...]
+    
+    if com:
+        compos = np.zeros([len(com),3])
+        comid = 0
+        for compair in com:
+            p1 = pos[compair[0]]
+            p2 = pos[compair[1]]
+            comloc = (p1+p2)/2.0
+            compos[comid,:] = comloc
+            comid+=1
+        pos = compos
+        sz = np.shape(pos)
+
     peps = np.reshape(pos,[1,sz[0]*sz[1]])[0]
     return peps
+    
 
 #Returns a numpy array with the cluster size that each peptide is part of (eg. [2, 2, 3, 3, 1, 3, ...] means peptides 0 and 1 are part of dimers, peptides 2, 3, and 5 are part of trimers, peptide 4 is a monomer, etc...). t is the time frame of trajectory xtc to look at from run tpr, outgro is the temporary gro file to write to when getting atom positions, cutoff is the minimum distance between two atoms in a peptide to define the peptides as being part of the same cluster, and ats is the number of atoms in a peptide.
 def sizeprof(t, traj, cutoff, ats, metric,types='all'):
@@ -56,6 +71,16 @@ def sizeprof(t, traj, cutoff, ats, metric,types='all'):
             clust = mk.getClust(init, cutoff, peps, pots, ats, False, metric) + [init]
             for at in clust:
                 sizes[at] = len(clust)  
+    elif metric == 'aligned':
+        peps = getPos(t,traj,types)
+        pots = range(len(peps)/3/ats)
+        sizes = np.zeros(len(peps)/3/ats)
+        while len(pots) > 0:
+            init = pots[0]
+            pots.remove(init)
+            clust = mk.getClust(init, cutoff, peps, pots, ats, False, metric) + [init]
+            for at in clust:
+                sizes[at] = len(clust)  
     return sizes
 #Returns a list of clusters sizes at each timestep in tlist. Each clustersize is a list of sizes 
 def getsizes(tlist, traj, cutoff, ats, metric,types='all'):
@@ -66,6 +91,8 @@ def sizerun(tlist, traj, cutoff, ats, metric, fnm='out.txt',types='all'):
     if metric == 'contact':
         mk.savedclusts([getsizes(tlist, traj, cutoff, ats, metric)], fnm=fnm)
     elif metric == 'optical':
+        mk.savedclusts([getsizes(tlist, traj, cutoff, ats, metric,types)], fnm=fnm)
+    elif metric == 'aligned':
         mk.savedclusts([getsizes(tlist, traj, cutoff, ats, metric,types)], fnm=fnm)
     else:
         print "This is not a recognized metric."
@@ -140,6 +167,7 @@ if __name__ == "__main__":
     #do a little sanity checking
     #basically savesizes.py
     
+    '''
     tlist = range(100)
     ats = 17
     cutoff = 0.5
@@ -200,3 +228,4 @@ if __name__ == "__main__":
     indsf.close()
     scalarf.close()
     vecf.close()
+    '''
